@@ -7,8 +7,12 @@ import 'models/book.dart';
 import 'models/magazine.dart';
 import 'models/library.dart';
 import 'screens/todo_screen.dart';
+import 'models/todo.dart';
 
 void main() {
+  const a = Todo(userId: 1, id: 1, title: 'test', completed: false);
+  const b = Todo(userId: 1, id: 1, title: 'test', completed: false);
+  debugPrint('${a == b}');
   runApp(const MyApp());
 }
 

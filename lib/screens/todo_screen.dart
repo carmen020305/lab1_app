@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 
-class Todo {
-  String id;
-  String title;
-  bool done;
-
-  Todo({required this.id, required this.title, this.done = false});
-}
+import '../api/todo_api.dart';
+import '../models/todo.dart';
 
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
@@ -26,7 +21,7 @@ class TodoTile extends StatelessWidget {
     return Card(
       child: CheckboxListTile(
         title: Text(todo.title),
-        value: todo.done,
+        value: todo.completed,
         onChanged: onChanged,
       ),
     );
@@ -35,13 +30,47 @@ class TodoTile extends StatelessWidget {
 
 class _TodoScreenState extends State<TodoScreen> {
   final _items = <Todo>[];
+  final _log = <String>[];
   final _input = TextEditingController();
   String? _filter;
+
+  @override
+  void initState() {
+    super.initState();
+    _load('/todos');
+  }
 
   @override
   void dispose() {
     _input.dispose();
     super.dispose();
+  }
+
+  void _addLog(String line) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _log.add(line);
+    });
+  }
+
+  Future<void> _load(String path) async {
+    setState(() {
+      _log.clear();
+    });
+    try {
+      final todos = await withRetry(() => fetchTodos(path: path), _addLog);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _items.clear();
+        _items.addAll(todos);
+      });
+    } catch (_) {
+      _addLog('Load failed');
+    }
   }
 
   @override
@@ -51,13 +80,36 @@ class _TodoScreenState extends State<TodoScreen> {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: Text('Todos (${_countDone()} done)')),
+      appBar: AppBar(
+        title: Text('Todos (${_countDone()} done)'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _load('/todos'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: () => _load('/nope'),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(8),
             child: TextField(controller: _input),
           ),
+          if (_log.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: _log.map((line) => Text(line)).toList(),
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               itemCount: visible.length,
@@ -89,8 +141,13 @@ class _TodoScreenState extends State<TodoScreen> {
                   child: TodoTile(
                     todo: todo,
                     onChanged: (value) {
+                      final position = _items.indexWhere(
+                        (t) => t.id == todo.id,
+                      );
                       setState(() {
-                        todo.done = value ?? false;
+                        _items[position] = todo.copyWith(
+                          completed: value ?? false,
+                        );
                       });
                     },
                   ),
@@ -112,7 +169,14 @@ class _TodoScreenState extends State<TodoScreen> {
       return;
     }
     setState(() {
-      _items.add(Todo(id: DateTime.now().toString(), title: _input.text));
+      _items.add(
+        Todo(
+          userId: 1,
+          id: DateTime.now().millisecondsSinceEpoch,
+          title: _input.text,
+          completed: false,
+        ),
+      );
       _input.clear();
     });
   }
@@ -120,7 +184,7 @@ class _TodoScreenState extends State<TodoScreen> {
   int _countDone() {
     var done = 0;
     for (var i = 0; i < _items.length; i++) {
-      done += _items[i].done ? 1 : 0;
+      done += _items[i].completed ? 1 : 0;
     }
     return done;
   }
